@@ -260,7 +260,6 @@ internal class VideoCommentsAdapter(
                 ImageLoader.loadInto(
                     binding.ivPicture1,
                     ImageUrl.commentThumbnail(v1.url),
-                    allowAnimated = true,
                 )
                 binding.ivPicture1.setOnClickListener { onPictureClick(item, 0) }
             } else {
@@ -274,7 +273,6 @@ internal class VideoCommentsAdapter(
                 ImageLoader.loadInto(
                     binding.ivPicture2,
                     ImageUrl.commentThumbnail(v2.url),
-                    allowAnimated = true,
                 )
                 binding.ivPicture2.setOnClickListener { onPictureClick(item, 1) }
             } else {
@@ -288,7 +286,6 @@ internal class VideoCommentsAdapter(
                 ImageLoader.loadInto(
                     binding.ivPicture3,
                     ImageUrl.commentThumbnail(v3.url),
-                    allowAnimated = true,
                 )
                 binding.ivPicture3.setOnClickListener { onPictureClick(item, 2) }
             } else {

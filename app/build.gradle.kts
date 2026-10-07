@@ -159,6 +159,8 @@ dependencies {
 
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
     implementation("org.brotli:dec:0.1.2")
+    // Loaded only by the opt-in comment image viewer path for animated WebP (API 21+).
+    implementation("com.github.penfeizhou.android.animation:awebp:3.0.5")
 
     implementation("androidx.media3:media3-exoplayer:1.8.0")
     implementation("androidx.media3:media3-exoplayer-dash:1.8.0")

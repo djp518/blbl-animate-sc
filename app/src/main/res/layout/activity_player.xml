@@ -1445,4 +1445,17 @@
         <include layout="@layout/include_video_comment_image_viewer_content" />
     </FrameLayout>
 
+    <ViewStub
+        android:id="@+id/live_super_chat_history_stub"
+        android:layout_width="@dimen/player_comments_panel_width"
+        android:layout_height="0dp"
+        android:layout_marginEnd="@dimen/player_comments_panel_margin_end"
+        android:layout_marginTop="@dimen/player_side_panel_margin_top"
+        android:layout_marginBottom="@dimen/player_comments_panel_margin_bottom"
+        android:inflatedId="@+id/live_super_chat_history_panel"
+        android:visibility="gone"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintTop_toTopOf="parent" />
+
 </androidx.constraintlayout.widget.ConstraintLayout>

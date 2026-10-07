@@ -2,17 +2,18 @@ package blbl.cat3399.core.image
 
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
-import android.graphics.ImageDecoder
 import android.graphics.Movie
-import android.graphics.drawable.AnimatedImageDrawable
+import android.graphics.drawable.Animatable
 import android.graphics.drawable.ColorDrawable
 import android.graphics.drawable.Drawable
-import android.os.Build
 import android.widget.ImageView
 import androidx.collection.LruCache
 import blbl.cat3399.R
 import blbl.cat3399.core.log.AppLog
 import blbl.cat3399.core.net.BiliClient
+import com.github.penfeizhou.animation.executor.FrameDecoderExecutor
+import com.github.penfeizhou.animation.loader.ByteBufferLoader
+import com.github.penfeizhou.animation.webp.WebPDrawable
 import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -37,8 +38,8 @@ object ImageLoader {
     }
 
     /**
-     * @param allowAnimated 允许播放动图（GIF / 动画 WebP）。仅对「用户可能发 GIF」的场景打开
-     *   （目前是评论区图片）；头像 / 封面一律 false —— 那些不会是动图，多一次解码尝试是浪费。
+     * @param allowAnimated 允许播放动图（GIF / 动画 WebP）。目前仅评论图片全屏查看器开启；
+     *   头像、封面和评论缩略图都走原有静态图路径。
      */
     fun loadInto(
         view: ImageView,
@@ -115,13 +116,13 @@ object ImageLoader {
     }
 
     /**
-     * 把字节解成可播放的动图；不是动图（或 API < 28 / 解码失败）返回 null，交给静态路径。
+     * 把字节解成可播放的动图；不是动图或解码失败时返回 null，交给静态路径。
      *
      * 不用 URL 后缀判定、直接看 magic bytes：这样即便服务端给的是无后缀 / 后缀不准的 URL
      * 也能播，而且静态图走的是与改之前完全一致的 [BitmapFactory] 路径。
      *
-     * GIF 优先走 [MovieGifDrawable]（API 1 的 [android.graphics.Movie]，自己驱动），
-     * 其余（动画 WebP）走 ImageDecoder / [AnimatedImageDrawable]。
+     * GIF 优先走 [MovieGifDrawable]（API 1 的 [android.graphics.Movie]，自己驱动）；动画 WebP
+     * 用独立解码库，兼容 API 21+。静态图片始终走原有 [BitmapFactory] 路径。
      */
     private fun decodeAnimated(bytes: ByteArray): Drawable? {
         // 超过上限就不按动图播：[Movie] 会把整份数据留在内存里，超大 GIF 有 OOM 风险，
@@ -150,23 +151,23 @@ object ImageLoader {
             return MovieGifDrawable(movie)
         }
 
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.P) return null
+        if (!AnimatedImageFormat.isAnimatedWebp(bytes)) return null
         return try {
-            val source = ImageDecoder.createSource(ByteBuffer.wrap(bytes))
-            ImageDecoder.decodeDrawable(source) as? AnimatedImageDrawable
+            // Only the full-screen comment viewer uses this decoder, so a single worker is enough.
+            FrameDecoderExecutor.getInstance().setPoolSize(1)
+            val loader = object : ByteBufferLoader() {
+                override fun getByteBuffer(): ByteBuffer = ByteBuffer.wrap(bytes)
+            }
+            WebPDrawable(loader)
         } catch (t: Throwable) {
-            AppLog.w(TAG, "animated decode failed", t)
+            AppLog.w(TAG, "animated WebP decode failed", t)
             null
         }
     }
 
     /**
-     * 挂上动图并起播。**顺序是硬要求**：先 `setImageDrawable` 再起播。
-     *
-     * [AnimatedImageDrawable] 连第一帧都要靠 `scheduleSelf()` 推进，而 scheduleSelf 最终走
-     * `Drawable.Callback.scheduleDrawable()` —— drawable 还没挂到 View 上时 callback 是 null，
-     * `start()` 会被静默丢弃，症状正是「占位正确、内容全透明」。
-     * 挂上之后还用 post 起播，确保 View 已经 attach 到窗口（拿到 ViewRootImpl 的 Choreographer）。
+     * 先把动图挂到 View，再在下一轮检查绑定仍有效后起播/触发第一帧，避免 recycled View
+     * 上的旧请求覆盖新内容。
      */
     private fun bindAnimated(
         view: ImageView,
@@ -179,8 +180,9 @@ object ImageLoader {
         view.post {
             if ((view.getTag(R.id.tag_image_loader_url) as? String) != url) return@post
             if (view.drawable !== drawable) return@post
-            when (drawable) {
-                is AnimatedImageDrawable -> runCatching { drawable.start() }
+            when {
+                drawable is MovieGifDrawable -> drawable.invalidateSelf()
+                drawable is Animatable && !drawable.isRunning -> runCatching { drawable.start() }
                 else -> drawable.invalidateSelf()
             }
         }
@@ -188,10 +190,11 @@ object ImageLoader {
 
     /** 换图 / 清空前把上一张动图收干净：摘监听、停动画，避免旧 GIF 在后台继续占调度。 */
     private fun detachAnimated(view: ImageView) {
-        when (val previous = view.drawable) {
-            is MovieGifDrawable -> view.removeOnAttachStateChangeListener(previous)
-            is AnimatedImageDrawable -> runCatching { previous.stop() }
+        val previous = view.drawable
+        if (previous is MovieGifDrawable) {
+            view.removeOnAttachStateChangeListener(previous)
         }
+        if (previous is Animatable) runCatching { previous.stop() }
     }
 
     private fun normalizeImageUrl(url: String?): String? {

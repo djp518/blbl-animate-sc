@@ -52,6 +52,7 @@ import blbl.cat3399.core.ui.Immersive
 import blbl.cat3399.core.ui.popup.AppPopup
 import blbl.cat3399.core.ui.popup.PopupHost
 import blbl.cat3399.databinding.ActivityPlayerBinding
+import blbl.cat3399.databinding.ViewLiveSuperChatHistoryPanelBinding
 import blbl.cat3399.databinding.ViewLiveSuperChatOverlayBinding
 import blbl.cat3399.feature.player.AudioBalanceLevel
 import blbl.cat3399.feature.player.PlayerBufferingOverlayController
@@ -105,6 +106,9 @@ class LivePlayerActivity : BaseActivity() {
     private lateinit var binding: ActivityPlayerBinding
     private lateinit var upQuickCard: PlayerUpQuickCardController
     private lateinit var superChatOverlay: LiveSuperChatOverlayController
+    private val superChatHistory = LiveSuperChatHistory()
+    private val superChatHistoryReturnFocus = FocusReturn()
+    private var superChatHistoryPanel: LiveSuperChatHistoryPanelController? = null
 
     private var player: BlblPlayerEngine? = null
     private var ijkRenderView: View? = null
@@ -199,6 +203,7 @@ class LivePlayerActivity : BaseActivity() {
     private var liveDanmakuBaseUptimeMs: Long = 0L
     private var liveDanmakuLastAppendMs: Int = Int.MIN_VALUE
     private var temporarySuperChatPreviewStarted = false
+    private var superChatHistoryConsumedKeyUp: Int = KeyEvent.KEYCODE_UNKNOWN
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -701,6 +706,8 @@ class LivePlayerActivity : BaseActivity() {
 
         if (event.action == KeyEvent.ACTION_DOWN && isInteractionKey(keyCode)) noteUserInteraction()
 
+        if (dispatchLiveSuperChatHistoryKeyEvent(event)) return true
+
         when (val shortcutResult = dispatchLiveCustomShortcutIfNeeded(event)) {
             PlayerCustomShortcutDispatchResult.NotHandled -> Unit
             PlayerCustomShortcutDispatchResult.Consumed -> return true
@@ -828,6 +835,101 @@ class LivePlayerActivity : BaseActivity() {
             return true
         }
         return super.dispatchKeyEvent(event)
+    }
+
+    private fun dispatchLiveSuperChatHistoryKeyEvent(event: KeyEvent): Boolean {
+        val keyCode = event.keyCode
+        if (event.action == KeyEvent.ACTION_UP && superChatHistoryConsumedKeyUp == keyCode) {
+            superChatHistoryConsumedKeyUp = KeyEvent.KEYCODE_UNKNOWN
+            return true
+        }
+        if (event.action == KeyEvent.ACTION_DOWN && event.repeatCount > 0 && superChatHistoryConsumedKeyUp == keyCode) {
+            return true
+        }
+
+        val panel = superChatHistoryPanel
+        if (panel?.isVisible == true) {
+            when (keyCode) {
+                KeyEvent.KEYCODE_BACK,
+                KeyEvent.KEYCODE_ESCAPE,
+                KeyEvent.KEYCODE_BUTTON_B,
+                KeyEvent.KEYCODE_DPAD_LEFT,
+                KeyEvent.KEYCODE_DPAD_RIGHT,
+                -> {
+                    if (event.action == KeyEvent.ACTION_DOWN && event.repeatCount == 0) {
+                        superChatHistoryConsumedKeyUp = keyCode
+                        finishOnBackKeyUp = false
+                        hideLiveSuperChatHistoryPanel()
+                    }
+                    return true
+                }
+
+                KeyEvent.KEYCODE_DPAD_UP,
+                KeyEvent.KEYCODE_DPAD_DOWN,
+                -> {
+                    if (event.action == KeyEvent.ACTION_DOWN) {
+                        superChatHistoryConsumedKeyUp = keyCode
+                        panel.moveSelection(if (keyCode == KeyEvent.KEYCODE_DPAD_UP) -1 else 1)
+                    }
+                    return true
+                }
+
+                KeyEvent.KEYCODE_DPAD_CENTER,
+                KeyEvent.KEYCODE_ENTER,
+                KeyEvent.KEYCODE_NUMPAD_ENTER,
+                KeyEvent.KEYCODE_BUTTON_A,
+                -> {
+                    if (event.action == KeyEvent.ACTION_DOWN) superChatHistoryConsumedKeyUp = keyCode
+                    return true
+                }
+
+                KeyEvent.KEYCODE_MENU,
+                KeyEvent.KEYCODE_SETTINGS,
+                KeyEvent.KEYCODE_INFO,
+                KeyEvent.KEYCODE_GUIDE,
+                -> {
+                    if (event.action == KeyEvent.ACTION_DOWN) hideLiveSuperChatHistoryPanel()
+                }
+            }
+        }
+
+        if (binding.settingsPanel.visibility == View.VISIBLE || keyCode != KeyEvent.KEYCODE_DPAD_RIGHT) return false
+
+        if (event.action == KeyEvent.ACTION_DOWN && event.repeatCount == 0) {
+            superChatHistoryConsumedKeyUp = keyCode
+            showLiveSuperChatHistoryPanel()
+        }
+        return event.action == KeyEvent.ACTION_DOWN || superChatHistoryConsumedKeyUp == keyCode
+    }
+
+    private fun showLiveSuperChatHistoryPanel() {
+        if (binding.settingsPanel.visibility == View.VISIBLE) return
+        val panel =
+            superChatHistoryPanel
+                ?: LiveSuperChatHistoryPanelController(
+                    ViewLiveSuperChatHistoryPanelBinding.bind(
+                        binding.liveSuperChatHistoryStub.apply {
+                            layoutResource = R.layout.view_live_super_chat_history_panel
+                        }.inflate(),
+                    ),
+                ).also { superChatHistoryPanel = it }
+        if (panel.isVisible) return
+        superChatHistoryReturnFocus.capture(currentFocus)
+        panel.show(superChatHistory.snapshot())
+        onTouchOverlayStateChanged()
+    }
+
+    private fun hideLiveSuperChatHistoryPanel() {
+        val panel = superChatHistoryPanel ?: return
+        if (!panel.isVisible) return
+        panel.hide()
+        superChatHistoryReturnFocus.restoreAndClear(fallback = binding.root, postOnFail = false)
+        onTouchOverlayStateChanged()
+    }
+
+    private fun recordLiveSuperChatHistory(item: LiveSuperChat) {
+        val entry = superChatHistory.append(item, System.currentTimeMillis() / 1_000L) ?: return
+        superChatHistoryPanel?.append(entry)
     }
 
     private fun dispatchLiveCustomShortcutIfNeeded(
@@ -1316,7 +1418,9 @@ class LivePlayerActivity : BaseActivity() {
             override val controlsVisibleForTouch: Boolean
                 get() = controlsVisible
             override val isSidePanelVisible: Boolean
-                get() = this@LivePlayerActivity.binding.settingsPanel.visibility == View.VISIBLE
+                get() =
+                    this@LivePlayerActivity.binding.settingsPanel.visibility == View.VISIBLE ||
+                        this@LivePlayerActivity.superChatHistoryPanel?.isVisible == true
             override val isBottomCardPanelVisible: Boolean = false
             override val isCommentImageViewerVisible: Boolean = false
 
@@ -1325,12 +1429,18 @@ class LivePlayerActivity : BaseActivity() {
             }
 
             override fun closeSidePanelFromTouch(): Boolean {
-                if (this@LivePlayerActivity.binding.settingsPanel.visibility != View.VISIBLE) return false
-                setControlsVisible(true)
-                settingsPanelReturnFocus.restoreAndClear(fallback = this@LivePlayerActivity.binding.btnAdvanced, postOnFail = false)
-                this@LivePlayerActivity.binding.settingsPanel.visibility = View.GONE
-                onTouchOverlayStateChanged()
-                return true
+                if (this@LivePlayerActivity.binding.settingsPanel.visibility == View.VISIBLE) {
+                    setControlsVisible(true)
+                    settingsPanelReturnFocus.restoreAndClear(fallback = this@LivePlayerActivity.binding.btnAdvanced, postOnFail = false)
+                    this@LivePlayerActivity.binding.settingsPanel.visibility = View.GONE
+                    onTouchOverlayStateChanged()
+                    return true
+                }
+                if (this@LivePlayerActivity.superChatHistoryPanel?.isVisible == true) {
+                    hideLiveSuperChatHistoryPanel()
+                    return true
+                }
+                return false
             }
 
             override fun togglePlayPauseFromTouch() {
@@ -1686,6 +1796,7 @@ class LivePlayerActivity : BaseActivity() {
                 onSuperChat = { ev ->
                     runOnUiThread(
                         Runnable {
+                            recordLiveSuperChatHistory(ev)
                             superChatOverlay.submit(ev)
                         },
                     )

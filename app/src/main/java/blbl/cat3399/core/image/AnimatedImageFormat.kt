@@ -29,6 +29,38 @@ internal object AnimatedImageFormat {
             bytes[10].u == 0x42 && // 'B'
             bytes[11].u == 0x50 // 'P'
 
+    /** Detect animation chunks without decoding static WebP thumbnails. */
+    fun isAnimatedWebp(bytes: ByteArray): Boolean {
+        if (!isWebp(bytes)) return false
+
+        var offset = 12
+        while (offset + RIFF_CHUNK_HEADER_SIZE <= bytes.size) {
+            val chunkSize =
+                (bytes[offset + 4].u) or
+                    (bytes[offset + 5].u shl 8) or
+                    (bytes[offset + 6].u shl 16) or
+                    (bytes[offset + 7].u shl 24)
+            if (chunkSize < 0) return false
+
+            val chunkEnd = offset.toLong() + RIFF_CHUNK_HEADER_SIZE + chunkSize.toLong()
+            if (chunkEnd > bytes.size) return false
+
+            if (
+                (bytes[offset].u == 0x41 && bytes[offset + 1].u == 0x4E &&
+                    bytes[offset + 2].u == 0x49 && bytes[offset + 3].u == 0x4D) || // ANIM
+                (bytes[offset].u == 0x41 && bytes[offset + 1].u == 0x4E &&
+                    bytes[offset + 2].u == 0x4D && bytes[offset + 3].u == 0x46) // ANMF
+            ) {
+                return true
+            }
+
+            offset = (chunkEnd + (chunkSize and 1)).toInt()
+        }
+        return false
+    }
+
+    private const val RIFF_CHUNK_HEADER_SIZE = 8
+
     private val Byte.u: Int
         get() = toInt() and 0xFF
 }

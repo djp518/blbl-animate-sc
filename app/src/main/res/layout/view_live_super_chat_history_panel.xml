@@ -1,0 +1,76 @@
+<?xml version="1.0" encoding="utf-8"?>
+<com.google.android.material.card.MaterialCardView xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:clipChildren="false"
+    android:clipToPadding="false"
+    android:visibility="gone"
+    app:cardBackgroundColor="#E61E1E1E"
+    app:cardCornerRadius="@dimen/player_side_panel_corner_radius"
+    app:cardElevation="@dimen/player_side_panel_elevation">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:clipChildren="false"
+        android:clipToPadding="false"
+        android:orientation="vertical"
+        android:padding="@dimen/player_side_panel_padding">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:gravity="center_vertical"
+            android:orientation="horizontal">
+
+            <TextView
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="醒目留言"
+                android:textColor="?attr/colorOnSurface"
+                android:textSize="@dimen/live_super_chat_history_title_text_size"
+                android:textStyle="bold" />
+
+            <TextView
+                android:id="@+id/tv_live_super_chat_history_count"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:textColor="?android:attr/textColorSecondary"
+                android:textSize="@dimen/live_super_chat_history_meta_text_size" />
+        </LinearLayout>
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="4dp"
+            android:layout_marginBottom="10dp"
+            android:text="↑ 较早 · 较新 ↓    方向左或返回键关闭"
+            android:textColor="?android:attr/textColorSecondary"
+            android:textSize="@dimen/live_super_chat_history_hint_text_size" />
+
+        <TextView
+            android:id="@+id/tv_live_super_chat_history_empty"
+            android:layout_width="match_parent"
+            android:layout_height="0dp"
+            android:layout_weight="1"
+            android:focusable="true"
+            android:gravity="center"
+            android:text="暂无醒目留言"
+            android:textColor="?android:attr/textColorSecondary"
+            android:textSize="@dimen/live_super_chat_history_content_text_size" />
+
+        <androidx.recyclerview.widget.RecyclerView
+            android:id="@+id/recycler_live_super_chat_history"
+            android:layout_width="match_parent"
+            android:layout_height="0dp"
+            android:clipChildren="false"
+            android:clipToPadding="false"
+            android:descendantFocusability="afterDescendants"
+            android:layout_weight="1"
+            android:overScrollMode="never"
+            android:paddingTop="2dp"
+            android:paddingBottom="2dp" />
+    </LinearLayout>
+</com.google.android.material.card.MaterialCardView>
