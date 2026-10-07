@@ -1,24 +1,30 @@
 package blbl.cat3399.feature.live
 
 import android.view.LayoutInflater
+import android.view.View
 import android.view.ViewGroup
 import androidx.recyclerview.widget.RecyclerView
-import blbl.cat3399.databinding.ItemLiveSuperChatHistoryBinding
-import java.text.SimpleDateFormat
-import java.util.Date
-import java.util.Locale
+import blbl.cat3399.R
+import blbl.cat3399.databinding.ViewLiveSuperChatOverlayBinding
 
 internal class LiveSuperChatHistoryAdapter : RecyclerView.Adapter<LiveSuperChatHistoryAdapter.ViewHolder>() {
     private val items = ArrayList<LiveSuperChatHistoryEntry>()
 
-    override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): ViewHolder =
-        ViewHolder(
-            ItemLiveSuperChatHistoryBinding.inflate(
+    override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): ViewHolder {
+        val binding =
+            ViewLiveSuperChatOverlayBinding.inflate(
                 LayoutInflater.from(parent.context),
                 parent,
                 false,
-            ),
-        )
+            )
+        val layoutParams = binding.root.layoutParams
+        if (layoutParams is ViewGroup.MarginLayoutParams) {
+            layoutParams.bottomMargin =
+                parent.resources.getDimensionPixelSize(R.dimen.live_super_chat_history_row_gap)
+            binding.root.layoutParams = layoutParams
+        }
+        return ViewHolder(binding)
+    }
 
     override fun onBindViewHolder(holder: ViewHolder, position: Int) {
         holder.bind(items[position])
@@ -45,19 +51,20 @@ internal class LiveSuperChatHistoryAdapter : RecyclerView.Adapter<LiveSuperChatH
     }
 
     class ViewHolder(
-        private val binding: ItemLiveSuperChatHistoryBinding,
+        private val binding: ViewLiveSuperChatOverlayBinding,
     ) : RecyclerView.ViewHolder(binding.root) {
         fun bind(item: LiveSuperChatHistoryEntry) {
-            binding.tvLiveSuperChatHistoryMeta.text =
-                "UID ${item.senderId} · ￥${item.price} · ${formatTime(item.sentAtEpochSeconds)}"
-            binding.tvLiveSuperChatHistoryContent.text = item.content
-        }
-
-        private fun formatTime(epochSeconds: Long): String =
-            TIME_FORMAT.format(Date(epochSeconds.coerceAtLeast(0L) * 1_000L))
-
-        private companion object {
-            val TIME_FORMAT = SimpleDateFormat("HH:mm:ss", Locale.getDefault())
+            LiveSuperChatCardBinder.bind(
+                binding = binding,
+                item = item.superChat,
+                sentAtEpochSeconds = item.sentAtEpochSeconds,
+            )
+            binding.root.visibility = View.VISIBLE
+            binding.root.alpha = 1f
+            binding.root.translationY = 0f
+            binding.root.isFocusable = true
+            binding.root.isClickable = true
+            binding.root.importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_YES
         }
     }
 }

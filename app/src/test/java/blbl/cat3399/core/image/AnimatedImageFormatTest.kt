@@ -25,7 +25,7 @@ class AnimatedImageFormatTest {
         assertFalse(AnimatedImageFormat.isGif(byteArrayOf(0x89.toByte(), 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A)))
         // JPEG
         assertFalse(AnimatedImageFormat.isGif(byteArrayOf(0xFF.toByte(), 0xD8.toByte(), 0xFF.toByte(), 0xE0.toByte(), 0x00, 0x10)))
-        // WebP（动画 WebP 的前缀与静态一致，靠 isWebp 识别、交给 ImageDecoder 处理）
+        // Static and animated WebP share the same RIFF/WEBP header.
         assertFalse(AnimatedImageFormat.isGif(webpHeader()))
         assertTrue(AnimatedImageFormat.isWebp(webpHeader()))
     }

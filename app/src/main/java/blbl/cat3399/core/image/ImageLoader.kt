@@ -33,6 +33,11 @@ object ImageLoader {
     private val inFlight = WeakHashMap<ImageView, Job>()
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
 
+    private data class ImageRequestKey(
+        val url: String,
+        val allowAnimated: Boolean,
+    )
+
     private val cache = object : LruCache<String, Bitmap>(maxCacheBytes()) {
         override fun sizeOf(key: String, value: Bitmap): Int = value.byteCount
     }
@@ -56,8 +61,9 @@ object ImageLoader {
             return
         }
 
-        val lastUrl = view.getTag(R.id.tag_image_loader_url) as? String
-        if (lastUrl == normalized) {
+        val requestKey = ImageRequestKey(normalized, allowAnimated)
+        val lastRequestKey = view.getTag(R.id.tag_image_loader_url) as? ImageRequestKey
+        if (lastRequestKey == requestKey) {
             // If we already have a non-placeholder image for the same URL, keep it to prevent
             // flicker on rebind (e.g. switching tabs triggers notifyItemRangeChanged).
             val drawable = view.drawable
@@ -69,12 +75,16 @@ object ImageLoader {
             val inFlightJob = inFlight[view]
             if (inFlightJob != null && inFlightJob.isActive) return
         } else {
-            view.setTag(R.id.tag_image_loader_url, normalized)
+            view.setTag(R.id.tag_image_loader_url, requestKey)
             inFlight.remove(view)?.cancel()
         }
 
         val cached = cache.get(normalized)
-        if (cached != null) {
+        // The comment thumbnail path caches the first frame through the regular static loader.
+        // When the full-screen viewer asks to animate a GIF/WebP URL, fetch the original bytes
+        // instead of returning that cached first frame. Other image paths keep the existing cache.
+        val animationUrl = allowAnimated && mayContainAnimation(normalized)
+        if (cached != null && !animationUrl) {
             detachAnimated(view)
             view.setImageBitmap(cached)
             return
@@ -86,8 +96,8 @@ object ImageLoader {
             try {
                 val bytes = withContext(Dispatchers.IO) { BiliClient.getBytes(normalized) }
                 if (allowAnimated) {
-                    // 动图**不进 Bitmap 缓存**：Drawable 带播放状态，缓存复用要处理 start/stop
-                    // 与生命周期，收益不抵复杂度；一屏最多一张（大图查看器）到三张（列表缩略图）。
+                    // Dynamic drawables carry playback state, so keep them out of the bitmap cache.
+                    // The comment viewer shows one image at a time.
                     val animated = withContext(Dispatchers.Default) { decodeAnimated(bytes) }
                     if (animated != null) {
                         AppLog.d(
@@ -95,8 +105,8 @@ object ImageLoader {
                             "animated decoded url=$normalized type=${animated.javaClass.simpleName} " +
                                 "${animated.intrinsicWidth}x${animated.intrinsicHeight}",
                         )
-                        if ((view.getTag(R.id.tag_image_loader_url) as? String) == normalized) {
-                            bindAnimated(view, animated, normalized)
+                        if ((view.getTag(R.id.tag_image_loader_url) as? ImageRequestKey) == requestKey) {
+                            bindAnimated(view, animated, requestKey)
                         }
                         return@launch
                     }
@@ -104,7 +114,7 @@ object ImageLoader {
                 val bmp = withContext(Dispatchers.Default) { BitmapFactory.decodeByteArray(bytes, 0, bytes.size) }
                 if (bmp != null) {
                     cache.put(normalized, bmp)
-                    if ((view.getTag(R.id.tag_image_loader_url) as? String) == normalized) {
+                    if ((view.getTag(R.id.tag_image_loader_url) as? ImageRequestKey) == requestKey) {
                         view.setImageBitmap(bmp)
                     }
                 }
@@ -172,16 +182,26 @@ object ImageLoader {
     private fun bindAnimated(
         view: ImageView,
         drawable: Drawable,
-        url: String,
+        requestKey: ImageRequestKey,
     ) {
         view.setImageDrawable(drawable)
         if (drawable is MovieGifDrawable) view.addOnAttachStateChangeListener(drawable)
-        AppLog.d(TAG, "animated bound url=$url ${drawable.intrinsicWidth}x${drawable.intrinsicHeight}")
+        AppLog.d(
+            TAG,
+            "animated bound url=${requestKey.url} ${drawable.intrinsicWidth}x${drawable.intrinsicHeight}",
+        )
         view.post {
-            if ((view.getTag(R.id.tag_image_loader_url) as? String) != url) return@post
+            if ((view.getTag(R.id.tag_image_loader_url) as? ImageRequestKey) != requestKey) return@post
             if (view.drawable !== drawable) return@post
             when {
                 drawable is MovieGifDrawable -> drawable.invalidateSelf()
+                drawable is WebPDrawable -> {
+                    // ImageView can mark a Drawable visible before its final bounds are applied.
+                    // Restart once the view has completed the bind so the WebP decoder starts
+                    // with the measured display size on older Android releases too.
+                    runCatching { drawable.start() }
+                        .onFailure { AppLog.w(TAG, "animated WebP start failed url=${requestKey.url}", it) }
+                }
                 drawable is Animatable && !drawable.isRunning -> runCatching { drawable.start() }
                 else -> drawable.invalidateSelf()
             }
@@ -213,6 +233,15 @@ object ImageLoader {
                 host == "bilivideo.cn" ||
                 host.endsWith(".bilivideo.cn")
         return if (isBiliCdn) raw.replaceFirst("http://", "https://") else raw
+    }
+
+    private fun mayContainAnimation(url: String): Boolean {
+        if (ImageUrl.isAnimatedImage(url)) return true
+        val path = url.substringBefore('?').lowercase()
+        return !path.endsWith(".jpg") &&
+            !path.endsWith(".jpeg") &&
+            !path.endsWith(".png") &&
+            !path.endsWith(".bmp")
     }
 
     private fun maxCacheBytes(): Int {

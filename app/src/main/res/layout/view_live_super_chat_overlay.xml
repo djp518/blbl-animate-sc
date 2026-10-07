@@ -8,6 +8,7 @@
     android:clipToOutline="true"
     android:focusable="false"
     android:importantForAccessibility="no"
+    android:stateListAnimator="@animator/blbl_focus_scale"
     android:visibility="gone"
     app:cardBackgroundColor="@android:color/transparent"
     app:cardCornerRadius="@dimen/live_super_chat_corner_radius"
@@ -109,5 +110,18 @@
             android:padding="@dimen/live_super_chat_message_padding"
             android:textColor="#FFFFFFFF"
             android:textSize="@dimen/live_super_chat_message_text_size" />
+
+        <TextView
+            android:id="@+id/tv_live_super_chat_history_meta"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:ellipsize="end"
+            android:maxLines="1"
+            android:paddingStart="@dimen/live_super_chat_message_padding"
+            android:paddingEnd="@dimen/live_super_chat_message_padding"
+            android:paddingBottom="@dimen/live_super_chat_message_padding"
+            android:textColor="#CCFFFFFF"
+            android:textSize="@dimen/live_super_chat_history_meta_text_size"
+            android:visibility="gone" />
     </LinearLayout>
 </com.google.android.material.card.MaterialCardView>

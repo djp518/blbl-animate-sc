@@ -4,12 +4,14 @@ import blbl.cat3399.core.model.LiveSuperChat
 import java.util.ArrayDeque
 
 internal data class LiveSuperChatHistoryEntry(
-    val messageId: Long,
-    val senderId: Long,
-    val price: Long,
-    val content: String,
+    val superChat: LiveSuperChat,
     val sentAtEpochSeconds: Long,
-)
+) {
+    val messageId: Long get() = superChat.id
+    val senderId: Long get() = superChat.uid
+    val price: Long get() = superChat.price
+    val content: String get() = superChat.message
+}
 
 /** Keeps only the current activity's most recent SCs; it never writes to disk. */
 internal class LiveSuperChatHistory(
@@ -37,10 +39,7 @@ internal class LiveSuperChatHistory(
         }
 
         return LiveSuperChatHistoryEntry(
-            messageId = item.id,
-            senderId = item.uid,
-            price = item.price,
-            content = item.message,
+            superChat = item,
             sentAtEpochSeconds = item.startTimeSeconds ?: receivedAtEpochSeconds,
         ).also(entries::addLast)
     }
